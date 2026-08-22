@@ -1,0 +1,8 @@
+#root { min-height: 100vh; }
+.member-picker { position: relative; margin-bottom: 11px; }
+.picker-trigger { width: 100%; padding: 11px 12px; border: 1px solid #e8dfd6; background: white; color: #81767b; font-size: 11px; text-align: left; display: flex; justify-content: space-between; align-items: center; }
+.picker-trigger b { color: #651d2a; font-size: 15px; }
+.picker-menu { position: absolute; left: 0; right: 0; top: calc(100% - 7px); z-index: 8; background: #fffdf9; border: 1px solid #e8dfd6; box-shadow: 0 8px 18px #2e172133; max-height: 205px; overflow-y: auto; padding: 6px; }
+.picker-menu input { margin: 0 0 5px !important; width: 100%; padding: 9px !important; background: #faf6f0 !important; }
+.picker-option { display: block; width: 100%; padding: 9px 8px; text-align: left; background: transparent; color: #282326; font-size: 11px; }
+.picker-option:hover, .picker-option.selected { background: #f3e1c7; color: #651d2a; font-weight: 700; }
