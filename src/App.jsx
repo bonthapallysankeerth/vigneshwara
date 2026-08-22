@@ -8,15 +8,46 @@ const categories = ['Decoration', 'Pooja Items', 'Food', 'Electricity', 'Sound S
 const days = ['Ganesh Idol Installation', 'Vedic Pooja & Prasadam', 'Cultural Program', 'Bhajans & Harathi', 'Children’s Games', 'Traditional Dance', 'Community Annadanam', 'Youth Cultural Night', 'Grand Harathi', 'Ganesh Visarjan']
 const empty = { chandha: [], incomes: [], sponsors: [], expenses: [], events: [], budget: 0 }
 const money = value => `₹${Number(value || 0).toLocaleString('en-IN')}`
+const LOGIN_KEY = 'vya-login-session'
+const todayKey = () => new Date().toISOString().slice(0, 10)
+const sharedStore = import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY
+  ? { url: `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/vya_records`, key: import.meta.env.VITE_SUPABASE_ANON_KEY }
+  : null
+const recordHeaders = () => ({ apikey: sharedStore.key, Authorization: `Bearer ${sharedStore.key}`, 'Content-Type': 'application/json' })
+const sharedData = rows => rows.reduce((result, row) => {
+  if (row.record_key === 'budget') return { ...result, budget: Number(row.payload.value || 0) }
+  return { ...result, [row.record_key]: [row.payload, ...result[row.record_key]] }
+}, { ...empty })
 
 function App() {
+  const [loggedIn, setLoggedIn] = useState(() => localStorage.getItem(LOGIN_KEY) === todayKey())
   const [data, setData] = useState(() => { const saved = JSON.parse(localStorage.getItem('vya-festival-v2') || 'null'); return saved ? { ...empty, ...saved, incomes: saved.incomes || [], events: saved.events || [] } : empty })
+  const [syncState, setSyncState] = useState(sharedStore ? 'Connecting…' : 'Local browser storage')
   const [active, setActive] = useState('Dashboard')
   const [modal, setModal] = useState(null)
   const [query, setQuery] = useState('')
   const [menu, setMenu] = useState(false)
   const [toast, setToast] = useState('')
   useEffect(() => localStorage.setItem('vya-festival-v2', JSON.stringify(data)), [data])
+  useEffect(() => {
+    if (!sharedStore) return undefined
+    let cancelled = false
+    const refresh = async () => {
+      try {
+        const response = await fetch(`${sharedStore.url}?select=record_key,record_id,payload&order=created_at.desc`, { headers: recordHeaders() })
+        if (!response.ok) throw new Error('Unable to read shared records')
+        const rows = await response.json()
+        if (!cancelled && rows.length) setData(sharedData(rows))
+        if (!cancelled) setSyncState('All changes saved')
+      } catch {
+        if (!cancelled) setSyncState('Offline - local copy')
+      }
+    }
+    refresh()
+    const timer = window.setInterval(refresh, 5000)
+    return () => { cancelled = true; window.clearInterval(timer) }
+  }, [])
+  useEffect(() => { const timer = window.setInterval(() => { if (localStorage.getItem(LOGIN_KEY) !== todayKey()) { localStorage.removeItem(LOGIN_KEY); setLoggedIn(false) } }, 60000); return () => window.clearInterval(timer) }, [])
   const totals = useMemo(() => {
     const receivedChandha = data.chandha.filter(x => x.status === 'Received').reduce((s, x) => s + Number(x.amount), 0)
     const pendingChandha = data.chandha.filter(x => x.status === 'Pending').reduce((s, x) => s + Number(x.amount), 0)
@@ -28,26 +59,51 @@ function App() {
     return { revenue, expenses, pending: pendingChandha + pendingSponsors, balance: revenue - expenses, budgetLeft: data.budget - expenses, utilization: data.budget ? Math.round(expenses / data.budget * 100) : 0 }
   }, [data])
   const notify = message => { setToast(message); window.setTimeout(() => setToast(''), 2500) }
-  const save = (key, item) => { setData(prev => ({ ...prev, [key]: [item, ...prev[key]] })); setModal(null); notify('Record added successfully.') }
-  const remove = (key, id) => { if (window.confirm('Are you sure you want to delete this record?')) setData(prev => ({ ...prev, [key]: prev[key].filter(item => item.id !== id) })) }
-  const receive = (key, id) => { setData(prev => ({ ...prev, [key]: prev[key].map(item => item.id === id ? { ...item, status: 'Received' } : item) })); notify('Amount marked as received.') }
+  const save = (key, item) => {
+    setData(prev => ({ ...prev, [key]: [item, ...prev[key]] })); setModal(null); notify('Record added successfully.')
+    if (sharedStore) fetch(sharedStore.url, { method: 'POST', headers: { ...recordHeaders(), Prefer: 'return=minimal' }, body: JSON.stringify({ record_key: key, record_id: String(item.id), payload: item }) }).catch(() => setSyncState('Offline - local copy'))
+  }
+  const remove = (key, id) => {
+    if (!window.confirm('Are you sure you want to delete this record?')) return
+    setData(prev => ({ ...prev, [key]: prev[key].filter(item => item.id !== id) }))
+    if (sharedStore) fetch(`${sharedStore.url}?record_key=eq.${encodeURIComponent(key)}&record_id=eq.${encodeURIComponent(id)}`, { method: 'DELETE', headers: recordHeaders() }).catch(() => setSyncState('Offline - local copy'))
+  }
+  const receive = (key, id) => {
+    const item = data[key].find(entry => entry.id === id)
+    const updated = item ? { ...item, status: 'Received' } : null
+    setData(prev => ({ ...prev, [key]: prev[key].map(entry => entry.id === id ? updated : entry) })); notify('Amount marked as received.')
+    if (sharedStore && updated) fetch(`${sharedStore.url}?record_key=eq.${encodeURIComponent(key)}&record_id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', headers: { ...recordHeaders(), Prefer: 'return=minimal' }, body: JSON.stringify({ payload: updated }) }).catch(() => setSyncState('Offline - local copy'))
+  }
+  const setBudget = value => {
+    setData(prev => ({ ...prev, budget: value }))
+    if (sharedStore) fetch(sharedStore.url, { method: 'POST', headers: { ...recordHeaders(), Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ record_key: 'budget', record_id: 'budget', payload: { value } }) }).catch(() => setSyncState('Offline - local copy'))
+  }
+  if (!loggedIn) return <Login onLogin={() => { localStorage.setItem(LOGIN_KEY, todayKey()); setLoggedIn(true) }} />
   const nav = ['Dashboard', 'Chandha', 'Expenses', 'Sponsors', 'Team Members', 'Budget', 'Festival Program', 'Records / Reports']
   return <div className="app-shell">
     <aside className={menu ? 'sidebar open' : 'sidebar'}><div className="brand"><div className="brand-mark">ॐ</div><div><strong>VIGNESHWARA<br />YOUTH</strong><small>FESTIVAL MANAGEMENT</small></div></div><div className="festival-chip"><span className="live-dot" /> FESTIVAL 2026 <b>10 DAYS</b></div><nav>{nav.map(item => <button className={active === item ? 'nav-item active' : 'nav-item'} key={item} onClick={() => { setActive(item); setMenu(false) }}>{item}</button>)}</nav><div className="sidebar-bottom"><div className="committee"><div className="avatar">VT</div><div><b>Vigneshwara Team</b><small>Festival committee</small></div></div><button className="logout">↪ &nbsp; Sign out</button></div></aside>
-    <main className="main"><header><button className="hamburger" onClick={() => setMenu(!menu)}>☰</button><div className="crumb">Festival Management <b>/</b> {active}</div><div className="header-actions"><span className="sync">● All changes saved</span><span>⌕</span><span>♢</span><div className="header-avatar">VT</div></div></header>
+    <main className="main"><header><button className="hamburger" onClick={() => setMenu(!menu)}>☰</button><div className="crumb">Festival Management <b>/</b> {active}</div><div className="header-actions"><span className="sync">● {syncState}</span><span>⌕</span><span>♢</span><div className="header-avatar">VT</div></div></header>
       <div className="content"><div className="page-heading"><div><p className="eyebrow">MONDAY, 14 SEPTEMBER 2026 <span>•</span> FESTIVAL DAY 1 OF 10</p><h1>{active === 'Dashboard' ? 'Hi Vigneshwara Team' : active}</h1><p className="subheading">{active === 'Dashboard' ? 'Here’s the financial pulse of your festival.' : 'Keep every detail accounted for, together.'}</p></div>{active === 'Chandha' && <div className="heading-actions"><button className="primary" onClick={() => setModal('Chandha')}>＋ Add chandha</button><button className="secondary" onClick={() => setModal('Income')}>＋ Add income</button></div>}{['Expenses', 'Sponsors'].includes(active) && <button className="primary" onClick={() => setModal(active)} >＋ Add {active === 'Expenses' ? 'expense' : 'sponsor'}</button>}</div>
         {active === 'Dashboard' && <Dashboard totals={totals} data={data} setActive={setActive} />}
         {active === 'Chandha' && <Ledger title="Chandha collection" type="chandha" rows={data.chandha} query={query} setQuery={setQuery} receive={receive} remove={remove} />}
         {active === 'Expenses' && <Ledger title="Expense register" type="expenses" rows={data.expenses} query={query} setQuery={setQuery} remove={remove} />}
         {active === 'Sponsors' && <Ledger title="Sponsorships" type="sponsors" rows={data.sponsors} query={query} setQuery={setQuery} receive={receive} remove={remove} />}
         {active === 'Team Members' && <Team data={data} />}
-        {active === 'Budget' && <Budget data={data} totals={totals} setData={setData} />}
+        {active === 'Budget' && <Budget data={data} totals={totals} setBudget={setBudget} />}
         {active === 'Festival Program' && <Program events={data.events} openEvent={() => setModal('Event')} />}
         {active === 'Records / Reports' && <Reports data={data} totals={totals} />}
       </div>
     </main>
     {modal && <RecordForm type={modal} onClose={() => setModal(null)} onSave={save} />}{toast && <div className="toast">✓ &nbsp;{toast}</div>}
   </div>
+}
+
+function Login({ onLogin }) {
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const submit = event => { event.preventDefault(); if (username === 'Vigneshwara' && password === '12345678') onLogin(); else setError('Incorrect username or password.') }
+  return <main className="login-page"><form className="login-card" onSubmit={submit}><div className="brand-mark">ॐ</div><p className="eyebrow">VIGNESHWARA YOUTH</p><h1>Welcome back</h1><p className="login-copy">Sign in to the shared festival records.</p><label>Username<input required value={username} onChange={event => setUsername(event.target.value)} autoComplete="username" /></label><label>Password<input required type="password" value={password} onChange={event => setPassword(event.target.value)} autoComplete="current-password" /></label>{error && <p className="login-error">{error}</p>}<button className="primary" type="submit">Sign in</button><small>One login is valid for the current day.</small></form></main>
 }
 
 function Dashboard({ totals, data, setActive }) { const cards = [['Total revenue', totals.revenue, 'gold'], ['Total expenses', totals.expenses, 'red'], ['Available balance', totals.balance, 'green'], ['Pending amount', totals.pending, 'cream']]; return <><section className="stat-grid">{cards.map(([label, value, tone]) => <div className={`stat-card ${tone}`} key={label}><span>{label}</span><strong>{money(value)}</strong><small>Calculated from recorded entries</small></div>)}</section><section className="dashboard-grid"><div className="panel financial-panel"><div className="panel-head"><div><h2>Financial overview</h2><p>Revenue against outgoing expenses</p></div></div><div className="chart"><div className="y-labels"><span>₹60k</span><span>₹40k</span><span>₹20k</span><span>₹0</span></div><div className="bars">{[42,55,38,68,48,76,58,88,64,72].map((height, i) => <div className="bar-group" key={i}><div className="bar revenue" style={{ height: `${height}%` }} /><div className="bar expense" style={{ height: `${height * .48}%` }} /></div>)}</div></div><div className="chart-legend">● Revenue　 <b>● Expenses</b></div></div><div className="panel budget-panel"><h2>Budget health</h2><p>Festival allocation</p><div className="ring" style={{ '--progress': `${Math.min(totals.utilization, 100) * 3.6}deg` }}><div><strong>{totals.utilization}%</strong><small>utilized</small></div></div><div className="budget-numbers"><div><span>Spent</span><b>{money(totals.expenses)}</b></div><div><span>Remaining</span><b className="green-text">{money(totals.budgetLeft)}</b></div><div><span>Total budget</span><b>{money(data.budget)}</b></div></div><button className="text-btn" onClick={() => setActive('Budget')}>Manage budget →</button></div></section><section className="lower-grid"><div className="panel"><div className="panel-head"><div><h2>Recent expenses</h2><p>Latest outgoing payments</p></div><button className="text-btn" onClick={() => setActive('Expenses')}>View all →</button></div>{data.expenses.slice(0, 4).map(item => <div className="expense-row" key={item.id}><span className="expense-icon">◇</span><div className="expense-name"><b>{item.title}</b><small>{item.category} · {item.spentBy}</small></div><strong>{money(item.amount)}</strong></div>)}</div><div className="panel"><div className="panel-head"><div><h2>Festival programs</h2><p>10-day celebration</p></div><button className="text-btn" onClick={() => setActive('Festival Program')}>See program →</button></div>{days.slice(0, 4).map((day, i) => <div className="timeline-item" key={day}><div className="day-dot">{i + 1}</div><div><b>{day}</b><small>Day {i + 1} · 6:00 PM</small></div></div>)}</div></section></> }
