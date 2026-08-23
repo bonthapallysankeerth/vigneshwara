@@ -8,7 +8,7 @@ export function useFestivalData(user) {
   const [error, setError] = useState('')
   const [syncState, setSyncState] = useState('Connecting...')
   const refresh = async () => {
-    try { setLoading(true); setError(''); setData(await fetchFestivalData(user.id)); setSyncState('All changes saved') }
+    try { setLoading(true); setError(''); setData(await fetchFestivalData(user.user_metadata?.association_id || user.id, user.id)); setSyncState('All changes saved') }
     catch (loadError) { console.error(loadError); setError('Unable to connect to the festival database. Please check your internet connection.'); setSyncState('Database unavailable') }
     finally { setLoading(false) }
   }

@@ -1,23 +1,22 @@
 import { supabase } from './supabase'
 
 const tables = ['chandha', 'expenses', 'sponsors', 'festival_programs', 'bookings', 'team_members']
-const tablesWithCreator = ['chandha', 'expenses', 'sponsors', 'bookings']
 
 const requireClient = () => {
   if (!supabase) throw new Error('Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to .env.')
   return supabase
 }
 
-export async function fetchFestivalData(userId) {
+export async function fetchFestivalData(ownerId, userId = ownerId) {
   const client = requireClient()
   const [chandha, expenses, sponsors, members, budget, programs, bookings, profile] = await Promise.all([
-    client.from('chandha').select('*').order('created_at', { ascending: false }),
-    client.from('expenses').select('*, team_members(id, name, role)').order('created_at', { ascending: false }),
-    client.from('sponsors').select('*').order('created_at', { ascending: false }),
-    client.from('team_members').select('*').order('created_at'),
-    client.from('budget').select('*').order('updated_at', { ascending: false }).limit(1).maybeSingle(),
-    client.from('festival_programs').select('*').order('day_number'),
-    client.from('bookings').select('*').order('created_at', { ascending: false }),
+    client.from('chandha').select('*').eq('owner_id', ownerId).order('created_at', { ascending: false }),
+    client.from('expenses').select('*, team_members(id, name, role)').eq('owner_id', ownerId).order('created_at', { ascending: false }),
+    client.from('sponsors').select('*').eq('owner_id', ownerId).order('created_at', { ascending: false }),
+    client.from('team_members').select('*').eq('owner_id', ownerId).order('created_at'),
+    client.from('budget').select('*').eq('owner_id', ownerId).order('updated_at', { ascending: false }).limit(1).maybeSingle(),
+    client.from('festival_programs').select('*').eq('owner_id', ownerId).order('day_number'),
+    client.from('bookings').select('*').eq('owner_id', ownerId).order('created_at', { ascending: false }),
     client.from('user_profiles').select('*').eq('id', userId).maybeSingle(),
   ])
   const result = [chandha, expenses, sponsors, members, budget, programs, bookings, profile].find(entry => entry.error)
@@ -34,34 +33,34 @@ export async function fetchFestivalData(userId) {
   }
 }
 
-export async function insertRecord(table, payload, userId) {
+export async function insertRecord(table, payload, userId, ownerId = userId) {
   const client = requireClient()
-  const record = tablesWithCreator.includes(table) ? { ...payload, created_by: userId } : payload
+  const record = { ...payload, owner_id: ownerId, created_by: userId }
   const { data, error } = await client.from(table).insert(record).select().single()
   if (error) throw error
   return data
 }
 
-export async function updateRecord(table, id, payload) {
+export async function updateRecord(table, id, payload, userId) {
   const client = requireClient()
-  const { data, error } = await client.from(table).update(payload).eq('id', id).select().single()
+  const { data, error } = await client.from(table).update(payload).eq('id', id).eq('owner_id', userId).select().single()
   if (error) throw error
   return data
 }
 
-export async function deleteRecord(table, id) {
+export async function deleteRecord(table, id, userId) {
   const client = requireClient()
-  const { error } = await client.from(table).delete().eq('id', id)
+  const { error } = await client.from(table).delete().eq('id', id).eq('owner_id', userId)
   if (error) throw error
 }
 
 export async function updateBudget(value, userId) {
   const client = requireClient()
-  const { data: existing, error: readError } = await client.from('budget').select('id').limit(1).maybeSingle()
+  const { data: existing, error: readError } = await client.from('budget').select('id').eq('owner_id', userId).limit(1).maybeSingle()
   if (readError) throw readError
   const query = existing
-    ? client.from('budget').update({ total_budget: value, updated_by: userId }).eq('id', existing.id)
-    : client.from('budget').insert({ total_budget: value, updated_by: userId })
+    ? client.from('budget').update({ total_budget: value, updated_by: userId }).eq('id', existing.id).eq('owner_id', userId)
+    : client.from('budget').insert({ total_budget: value, updated_by: userId, owner_id: userId })
   const { data, error } = await query.select().single()
   if (error) throw error
   return data

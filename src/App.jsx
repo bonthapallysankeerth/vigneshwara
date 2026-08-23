@@ -22,7 +22,8 @@ function App() {
   const [saving, setSaving] = useState(false)
   const { data, loading, error, syncState, refresh } = useFestivalData(user)
   const isAdmin = data.profile?.role === 'admin' || user?.user_metadata?.role === 'admin'
-  const youthName = data.profile?.youth_name || user?.user_metadata?.youth_name || 'Youth Association'
+  const accountId = data.profile?.association_id || user?.user_metadata?.association_id || user?.id
+  const youthName = user?.user_metadata?.youth_name || data.profile?.youth_name || 'Youth Association'
   const denyChanges = () => { const message = 'You do not have access to make changes. Please report this to the admin.'; setOperationError(message); setToast(message); window.setTimeout(() => setToast(''), 3000) }
 
   useEffect(() => {
@@ -48,26 +49,26 @@ function App() {
   const save = (key, item) => { if (!isAdmin) { denyChanges(); return } return run(async () => {
     const table = key === 'events' ? 'festival_programs' : key === 'members' ? 'team_members' : key
     const payload = key === 'chandha' ? { person_name: item.person, mobile: item.mobile, amount: item.amount, status: item.status, date: item.date, note: item.note } : key === 'expenses' ? { title: item.title, amount: item.amount, category: item.category, note: item.note, spent_by: item.spentById, date: item.date } : key === 'events' ? { day_number: item.day_number, title: item.title, description: item.description, date: item.date, location: item.location, status: 'Planned' } : key === 'members' ? { name: item.name, role: 'Team Member' } : key === 'bookings' ? { person_name: item.person_name, purpose_name: item.purpose_name, mobile: item.mobile, full_payment: item.full_payment, advance_paid: item.advance_paid } : { name: item.name, item: item.item, amount: item.amount, status: item.status, date: item.date, note: item.note }
-    await insertRecord(table, payload, user.id)
+    await insertRecord(table, payload, user.id, accountId)
     setModal(null)
   }) }
   const editMember = item => { if (!isAdmin) { denyChanges(); return } return run(async () => {
-    await updateRecord('team_members', item.id, { name: item.name, role: item.role || 'Team Member', team_name: item.team_name || null })
+    await updateRecord('team_members', item.id, { name: item.name, role: item.role || 'Team Member', team_name: item.team_name || null }, accountId)
     setEditingMember(null)
   }) }
   const editSponsor = item => { if (!isAdmin) { denyChanges(); return } return run(async () => {
-    await updateRecord('sponsors', item.id, { name: item.name, item: item.item, amount: Number(item.amount), status: item.status, date: item.date, note: item.note })
+    await updateRecord('sponsors', item.id, { name: item.name, item: item.item, amount: Number(item.amount), status: item.status, date: item.date, note: item.note }, accountId)
     setEditingSponsor(null)
   }) }
   const editRecord = item => { if (!isAdmin) { denyChanges(); return } return run(async () => {
     const table = item.type === 'chandha' ? 'chandha' : 'expenses'
     const payload = table === 'chandha' ? { person_name: item.person, mobile: item.mobile, amount: Number(item.amount), status: item.status, date: item.date, note: item.note } : { title: item.title, amount: Number(item.amount), category: item.category, note: item.note, spent_by: item.spentById, date: item.date }
-    await updateRecord(table, item.id, payload)
+    await updateRecord(table, item.id, payload, accountId)
     setEditingRecord(null)
   }) }
-  const remove = (table, id) => { if (!isAdmin) { denyChanges(); return } const message = table === 'team_members' ? 'Are you want delete the member?' : 'Are you sure you want to delete this record?'; if (window.confirm(message)) run(() => deleteRecord(table, id)) }
-  const receive = (table, id) => { if (!isAdmin) { denyChanges(); return } return run(() => updateRecord(table, id, { status: 'Received' })) }
-  const setBudget = value => { if (!isAdmin) { denyChanges(); return } return run(() => updateBudget(Number(value), user.id)) }
+  const remove = (table, id) => { if (!isAdmin) { denyChanges(); return } const message = table === 'team_members' ? 'Are you want delete the member?' : 'Are you sure you want to delete this record?'; if (window.confirm(message)) run(() => deleteRecord(table, id, accountId)) }
+  const receive = (table, id) => { if (!isAdmin) { denyChanges(); return } return run(() => updateRecord(table, id, { status: 'Received' }, accountId)) }
+  const setBudget = value => { if (!isAdmin) { denyChanges(); return } return run(() => updateBudget(Number(value), accountId)) }
   const signOut = async () => {
     const { error: signOutError } = await supabase.auth.signOut()
     if (signOutError) {
@@ -89,7 +90,7 @@ function App() {
       <div className="content"><div className="page-heading"><div><p className="eyebrow">{youthName.toUpperCase()} <span>•</span> SHARED DATABASE</p><h1>{active === 'Dashboard' ? `Hi ${youthName}` : active}</h1><p className="subheading">{active === 'Dashboard' ? 'Here’s the financial pulse of your festival.' : 'Keep every detail accounted for, together.'}</p></div>{active === 'Chandha' ? <div className="heading-actions"><button className="secondary" onClick={() => isAdmin ? setModal('ChandhaCollection') : denyChanges()}>＋ Add chanda</button><button className="primary" onClick={() => isAdmin ? setModal('Income') : denyChanges()}>＋ Add income</button></div> : ['Expenses', 'Sponsors', 'Bookings'].includes(active) && <button className="primary" onClick={() => isAdmin ? setModal(active) : denyChanges()}>＋ Add {active === 'Expenses' ? 'expense' : active === 'Bookings' ? 'booking' : 'sponsor'}</button>}</div>
         {(error || operationError) && <p className="login-error">{operationError || error}</p>}
         {loading ? <section className="panel loading">Loading {active}...</section> : <Page active={active} data={data} totals={totals} query={query} setQuery={setQuery} setActive={setActive} receive={receive} remove={remove} editSponsor={setEditingSponsor} editRecord={setEditingRecord} setBudget={setBudget} isAdmin={isAdmin} openEvent={() => isAdmin ? setModal('Event') : denyChanges()} openMember={() => isAdmin ? setModal('Member') : denyChanges()} editMember={member => isAdmin ? setEditingMember(member) : denyChanges()} />}
-      </div>
+      </div><footer className="app-footer">Developed by FirstgenAI Technologies <span>·</span> Contact - 9000278794 - Ganesh <span>·</span> 9515531463 - B. Sankeerth</footer>
     </main>
       {modal === 'ChandhaCollection' && <ChandhaForm mode="collection" onClose={() => setModal(null)} onSave={save} />}{modal === 'Income' && <ChandhaForm mode="income" onClose={() => setModal(null)} onSave={save} />}{modal === 'Event' && <EventForm onClose={() => setModal(null)} onSave={save} />}{modal === 'Member' && <MemberForm onClose={() => setModal(null)} onSave={save} saving={saving} />}{modal === 'Bookings' && <BookingForm onClose={() => setModal(null)} onSave={save} />}{modal && !['ChandhaCollection', 'Income', 'Event', 'Member', 'Bookings'].includes(modal) && <RecordForm type={modal} members={data.members} onClose={() => setModal(null)} onSave={save} />}{editingSponsor && <SponsorEditForm sponsor={editingSponsor} onClose={() => setEditingSponsor(null)} onSave={editSponsor} />}{editingRecord && <RecordEditForm record={editingRecord} members={data.members} onClose={() => setEditingRecord(null)} onSave={editRecord} />}{editingMember && <MemberEditForm member={editingMember} onClose={() => setEditingMember(null)} onSave={editMember} saving={saving} />}{toast && <div className="toast">✓ &nbsp;{toast}</div>}
   </div>
@@ -103,7 +104,7 @@ function Login() {
   const [message, setMessage] = useState('')
   const submit = async event => { event.preventDefault(); setError(''); setMessage(''); const { error: authError } = await supabase.auth.signInWithPassword({ email, password }); if (authError) setError(authError.message) }
   const reset = async event => { event.preventDefault(); setError(''); const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin }); if (resetError) setError(resetError.message); else setMessage('Password reset instructions sent to your email.') }
-  if (mode === 'signup') return <CreateAccount onBack={() => { setMode('login'); setError('') }} />
+  if (mode === 'signup') return <CreateAccount onBack={message => { setMode('login'); setError(''); setMessage(message || '') }} />
   return <main className="login-page"><form className="login-card" onSubmit={mode === 'reset' ? reset : submit}><div className="brand-mark">ॐ</div><p className="eyebrow">YOUTH ASSOCIATION</p><h1>{mode === 'reset' ? 'Reset password' : 'Welcome back'}</h1><p className="login-copy">{mode === 'reset' ? 'Enter your email to receive reset instructions.' : 'Sign in to the shared festival records.'}</p><label>Email<input required type="email" value={email} onChange={event => setEmail(event.target.value)} /></label>{mode !== 'reset' && <label>Password<input required type="password" value={password} onChange={event => setPassword(event.target.value)} /></label>}{error && <p className="login-error">{error}</p>}{message && <p className="login-success">{message}</p>}<button className="primary" type="submit">{mode === 'reset' ? 'Send reset link' : 'Login'}</button>{mode === 'login' && <><button className="text-btn auth-link" type="button" onClick={() => setMode('reset')}>Forgot password?</button><button className="secondary auth-secondary" type="button" onClick={() => setMode('signup')}>Create Account</button></>}{mode === 'reset' && <button className="text-btn auth-link" type="button" onClick={() => setMode('login')}>Back to login</button>}</form></main>
 }
 
@@ -112,7 +113,7 @@ function CreateAccount({ onBack }) {
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const update = event => setForm({ ...form, [event.target.name]: event.target.value })
-  const submit = async event => { event.preventDefault(); setError(''); setMessage(''); if (form.admin_password !== form.admin_password_confirm || form.youth_password !== form.youth_password_confirm) { setError('Passwords do not match.'); return } const admin = await supabase.auth.signUp({ email: form.admin_email, password: form.admin_password, options: { data: { youth_name: form.youth_name, role: 'admin' } } }); if (admin.error) { setError(admin.error.message); return } const youth = await supabase.auth.signUp({ email: form.youth_email, password: form.youth_password, options: { data: { youth_name: form.youth_name, role: 'youth' } } }); if (youth.error) { setError(youth.error.message); return } await supabase.auth.signOut(); setMessage('Accounts created. Check email confirmation if enabled, then log in with the Admin mail id.'); }
+  const submit = async event => { event.preventDefault(); setError(''); setMessage(''); if (form.admin_password !== form.admin_password_confirm || form.youth_password !== form.youth_password_confirm) { setError('Passwords do not match.'); return } const associationId = crypto.randomUUID(); const admin = await supabase.auth.signUp({ email: form.admin_email, password: form.admin_password, options: { data: { youth_name: form.youth_name, role: 'admin', association_id: associationId } } }); if (admin.error) { setError(admin.error.message); return } const youth = await supabase.auth.signUp({ email: form.youth_email, password: form.youth_password, options: { data: { youth_name: form.youth_name, role: 'youth', association_id: associationId } } }); if (youth.error) { setError(youth.error.message); return } await supabase.auth.signOut(); onBack('Accounts created. Check email confirmation if enabled, then log in with the Admin mail id.') }
   return <main className="login-page"><form className="login-card account-card" onSubmit={submit}><div className="brand-mark">ॐ</div><p className="eyebrow">NEW ASSOCIATION</p><h1>Create Account</h1><label>Youth Name<input required name="youth_name" onChange={update} /></label><label>Admin Mail id<input required type="email" name="admin_email" onChange={update} /></label><label>Admin password<input required type="password" name="admin_password" onChange={update} /></label><label>Confirm admin password<input required type="password" name="admin_password_confirm" onChange={update} /></label><label>Youth mail id<input required type="email" name="youth_email" onChange={update} /></label><label>Youth password<input required type="password" name="youth_password" onChange={update} /></label><label>Confirm youth password<input required type="password" name="youth_password_confirm" onChange={update} /></label>{error && <p className="login-error">{error}</p>}{message && <p className="login-success">{message}</p>}<button className="primary" type="submit">Create Account</button><button className="text-btn auth-link" type="button" onClick={onBack}>Back to login</button></form></main>
 }
 function Page({ active, data, totals, query, setQuery, setActive, receive, remove, editSponsor, editRecord, openEvent, openMember, editMember }) { if (active === 'Dashboard') return <><Dashboard data={data} totals={totals} setActive={setActive} /><PendingList expenses={data.expenses} chandha={data.chandha} receive={receive} /></>; if (['Chandha', 'Expenses', 'Sponsors'].includes(active)) return <Ledger title={active} type={active.toLowerCase()} rows={data[active.toLowerCase()]} query={query} setQuery={setQuery} receive={receive} remove={remove} editSponsor={editSponsor} editRecord={editRecord} />; if (active === 'Team Members') return <Team data={data} openMember={openMember} editMember={editMember} remove={remove} />; if (active === 'Bookings') return <Bookings rows={data.bookings} />; if (active === 'Budget') return <Budget totals={totals} />; if (active === 'Festival Program') return <Program events={data.events} openEvent={openEvent} />; return <Reports data={data} totals={totals} /> }
