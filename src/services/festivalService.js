@@ -1,23 +1,26 @@
 import { supabase } from './supabase'
 
-const tables = ['chandha', 'expenses', 'sponsors', 'festival_programs']
+const tables = ['chandha', 'expenses', 'sponsors', 'festival_programs', 'bookings', 'team_members']
+const tablesWithCreator = ['chandha', 'expenses', 'sponsors', 'bookings']
 
 const requireClient = () => {
   if (!supabase) throw new Error('Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to .env.')
   return supabase
 }
 
-export async function fetchFestivalData() {
+export async function fetchFestivalData(userId) {
   const client = requireClient()
-  const [chandha, expenses, sponsors, members, budget, programs] = await Promise.all([
+  const [chandha, expenses, sponsors, members, budget, programs, bookings, profile] = await Promise.all([
     client.from('chandha').select('*').order('created_at', { ascending: false }),
     client.from('expenses').select('*, team_members(id, name, role)').order('created_at', { ascending: false }),
     client.from('sponsors').select('*').order('created_at', { ascending: false }),
     client.from('team_members').select('*').order('created_at'),
     client.from('budget').select('*').order('updated_at', { ascending: false }).limit(1).maybeSingle(),
     client.from('festival_programs').select('*').order('day_number'),
+    client.from('bookings').select('*').order('created_at', { ascending: false }),
+    client.from('user_profiles').select('*').eq('id', userId).maybeSingle(),
   ])
-  const result = [chandha, expenses, sponsors, members, budget, programs].find(entry => entry.error)
+  const result = [chandha, expenses, sponsors, members, budget, programs, bookings, profile].find(entry => entry.error)
   if (result) throw result.error
   return {
     chandha: chandha.data || [],
@@ -26,12 +29,15 @@ export async function fetchFestivalData() {
     members: members.data || [],
     budget: Number(budget.data?.total_budget || 0),
     events: programs.data || [],
+    bookings: bookings.data || [],
+    profile: profile.data || null,
   }
 }
 
 export async function insertRecord(table, payload, userId) {
   const client = requireClient()
-  const { data, error } = await client.from(table).insert({ ...payload, created_by: userId }).select().single()
+  const record = tablesWithCreator.includes(table) ? { ...payload, created_by: userId } : payload
+  const { data, error } = await client.from(table).insert(record).select().single()
   if (error) throw error
   return data
 }

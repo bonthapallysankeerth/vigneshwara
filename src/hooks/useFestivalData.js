@@ -3,12 +3,12 @@ import { fetchFestivalData, subscribeToFestivalData } from '../services/festival
 import { isSupabaseConfigured, supabase } from '../services/supabase'
 
 export function useFestivalData(user) {
-  const [data, setData] = useState({ chandha: [], sponsors: [], expenses: [], events: [], members: [], budget: 0 })
+  const [data, setData] = useState({ chandha: [], sponsors: [], expenses: [], events: [], bookings: [], members: [], budget: 0, profile: null })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [syncState, setSyncState] = useState('Connecting...')
   const refresh = async () => {
-    try { setLoading(true); setError(''); setData(await fetchFestivalData()); setSyncState('All changes saved') }
+    try { setLoading(true); setError(''); setData(await fetchFestivalData(user.id)); setSyncState('All changes saved') }
     catch (loadError) { console.error(loadError); setError('Unable to connect to the festival database. Please check your internet connection.'); setSyncState('Database unavailable') }
     finally { setLoading(false) }
   }
