@@ -55,10 +55,9 @@ where not exists (select 1 from public.team_members);
 
 insert into public.budget (total_budget) select 0 where not exists (select 1 from public.budget);
 
-insert into public.festival_programs (day_number, date, title, description, start_time, end_time, location)
-select day_number, date '2026-09-14' + (day_number - 1), title, 'Community temple festival program', '6:00 PM', '9:00 PM', 'Community temple grounds'
-from (values (1, 'Ganesh Idol Installation'), (2, 'Vedic Pooja & Prasadam'), (3, 'Cultural Program'), (4, 'Bhajans & Harathi'), (5, 'Children''s Games'), (6, 'Traditional Dance'), (7, 'Community Annadanam'), (8, 'Youth Cultural Night'), (9, 'Grand Harathi'), (10, 'Ganesh Visarjan')) as programs(day_number, title)
-where not exists (select 1 from public.festival_programs);
+delete from public.festival_programs
+where description = 'Community temple festival program'
+  and title in ('Ganesh Idol Installation', 'Vedic Pooja & Prasadam', 'Cultural Program', 'Bhajans & Harathi', 'Children''s Games', 'Traditional Dance', 'Community Annadanam', 'Youth Cultural Night', 'Grand Harathi', 'Ganesh Visarjan');
 
 alter table public.team_members enable row level security;
 alter table public.chandha enable row level security;
@@ -67,6 +66,13 @@ alter table public.sponsors enable row level security;
 alter table public.budget enable row level security;
 alter table public.festival_programs enable row level security;
 
+drop policy if exists "authenticated users can manage team members" on public.team_members;
+drop policy if exists "authenticated users can manage chandha" on public.chandha;
+drop policy if exists "authenticated users can manage expenses" on public.expenses;
+drop policy if exists "authenticated users can manage sponsors" on public.sponsors;
+drop policy if exists "authenticated users can manage budget" on public.budget;
+drop policy if exists "authenticated users can manage festival programs" on public.festival_programs;
+
 create policy "authenticated users can manage team members" on public.team_members for all to authenticated using (true) with check (true);
 create policy "authenticated users can manage chandha" on public.chandha for all to authenticated using (true) with check (true);
 create policy "authenticated users can manage expenses" on public.expenses for all to authenticated using (true) with check (true);
@@ -74,4 +80,19 @@ create policy "authenticated users can manage sponsors" on public.sponsors for a
 create policy "authenticated users can manage budget" on public.budget for all to authenticated using (true) with check (true);
 create policy "authenticated users can manage festival programs" on public.festival_programs for all to authenticated using (true) with check (true);
 
-alter publication supabase_realtime add table public.chandha, public.expenses, public.sponsors, public.budget, public.festival_programs;
+do $$
+declare
+  target_table text;
+begin
+  foreach target_table in array array['chandha', 'expenses', 'sponsors', 'budget', 'festival_programs'] loop
+    if not exists (
+      select 1
+      from pg_publication_tables
+      where pubname = 'supabase_realtime'
+        and schemaname = 'public'
+        and pg_publication_tables.tablename = target_table
+    ) then
+      execute format('alter publication supabase_realtime add table %I.%I', 'public', target_table);
+    end if;
+  end loop;
+end $$;
