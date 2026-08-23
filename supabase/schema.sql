@@ -44,10 +44,14 @@ create table if not exists public.team_members (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   role text not null default 'Team Member',
+  team_name text,
   photo_url text,
+  photo_position text not null default 'center',
   created_at timestamptz not null default now()
 );
 alter table public.team_members add column if not exists photo_url text;
+alter table public.team_members add column if not exists team_name text;
+alter table public.team_members add column if not exists photo_position text not null default 'center';
 
 create table if not exists public.chandha (
   id uuid primary key default gen_random_uuid(), person_name text not null, mobile text,
