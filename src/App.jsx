@@ -7,6 +7,22 @@ import { useFestivalData } from './hooks/useFestivalData'
 
 const categories = ['Decoration', 'Pooja Items', 'Food', 'Electricity', 'Sound System', 'Cultural Program', 'Transportation', 'Printing', 'Cleaning', 'Maintenance', 'Other']
 const money = value => `₹${Number(value || 0).toLocaleString('en-IN')}`
+const preparePhoto = file => new Promise((resolve, reject) => {
+  const image = new Image()
+  image.onload = () => {
+    const maxSize = 700
+    const scale = Math.min(1, maxSize / Math.max(image.width, image.height))
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.max(1, Math.round(image.width * scale))
+    canvas.height = Math.max(1, Math.round(image.height * scale))
+    const context = canvas.getContext('2d')
+    context.drawImage(image, 0, 0, canvas.width, canvas.height)
+    resolve(canvas.toDataURL('image/jpeg', 0.78))
+    URL.revokeObjectURL(image.src)
+  }
+  image.onerror = () => { URL.revokeObjectURL(image.src); reject(new Error('Unable to read this photo.')) }
+  image.src = URL.createObjectURL(file)
+})
 
 function App() {
   const [user, setUser] = useState(undefined)
@@ -41,7 +57,7 @@ function App() {
   }, [data])
 
   const run = async action => {
-    try { setSaving(true); setOperationError(''); await action(); await refresh(); setToast('Record saved successfully.'); window.setTimeout(() => setToast(''), 2500) }
+    try { setSaving(true); setOperationError(''); await action(); setSaving(false); setToast('Record saved successfully.'); window.setTimeout(() => setToast(''), 2500); refresh() }
     catch (saveError) { console.error(saveError); setOperationError(saveError.message || 'Unable to save the record.') }
     finally { setSaving(false) }
   }
@@ -153,7 +169,7 @@ function ChandhaForm({ mode, onClose, onSave }) {
 function MemberForm({ onClose, onSave, saving }) {
   const [form, setForm] = useState({ photo_position: 'center' })
   const update = event => setForm({ ...form, [event.target.name]: event.target.value })
-  const selectPhoto = event => { const file = event.target.files?.[0]; if (!file) return; const reader = new FileReader(); reader.onload = () => setForm({ ...form, photo_url: reader.result }); reader.readAsDataURL(file) }
+  const selectPhoto = async event => { const file = event.target.files?.[0]; if (!file) return; try { const photo_url = await preparePhoto(file); setForm(current => ({ ...current, photo_url })) } catch (photoError) { console.error(photoError) } }
   const submit = event => { event.preventDefault(); onSave('members', form) }
   return <div className="modal-backdrop"><form className="modal" onSubmit={submit}><div className="modal-head"><div><p className="eyebrow">NEW MEMBER</p><h2>Add member</h2></div><button type="button" onClick={onClose}>×</button></div><input required name="name" onChange={update} placeholder="Name" /><input name="role" onChange={update} placeholder="Role (optional)" /><input name="team_name" onChange={update} placeholder="Team name (optional)" /><label className="file-input">Profile photo<input type="file" accept="image/*" onChange={selectPhoto} /></label><label className="file-input">Photo crop<select name="photo_position" value={form.photo_position} onChange={update}><option value="center">Center</option><option value="top">Top</option><option value="bottom">Bottom</option><option value="left">Left</option><option value="right">Right</option></select></label><div className="form-actions"><button className="secondary" type="button" onClick={onClose} disabled={saving}>Cancel</button><button className="primary" type="submit" disabled={saving}>{saving ? 'Saving...' : 'Add member'}</button></div></form></div>
 }
@@ -161,7 +177,7 @@ function MemberForm({ onClose, onSave, saving }) {
 function MemberEditForm({ member, onClose, onSave, saving }) {
   const [form, setForm] = useState({ ...member, photo_position: member.photo_position || 'center' })
   const update = event => setForm({ ...form, [event.target.name]: event.target.value })
-  const selectPhoto = event => { const file = event.target.files?.[0]; if (!file) return; const reader = new FileReader(); reader.onload = () => setForm({ ...form, photo_url: reader.result }); reader.readAsDataURL(file) }
+  const selectPhoto = async event => { const file = event.target.files?.[0]; if (!file) return; try { const photo_url = await preparePhoto(file); setForm(current => ({ ...current, photo_url })) } catch (photoError) { console.error(photoError) } }
   const submit = event => { event.preventDefault(); onSave(form) }
   return <div className="modal-backdrop"><form className="modal" onSubmit={submit}><div className="modal-head"><div><p className="eyebrow">EDIT MEMBER</p><h2>{member.name}</h2></div><button type="button" onClick={onClose}>×</button></div><input required name="name" value={form.name || ''} onChange={update} placeholder="Name" /><input name="role" value={form.role || ''} onChange={update} placeholder="Role (optional)" /><input name="team_name" value={form.team_name || ''} onChange={update} placeholder="Team name (optional)" />{form.photo_url && <img className="member-photo-preview" src={form.photo_url} alt="Profile preview" style={{ objectPosition: form.photo_position }} />}<label className="file-input">Profile photo<input type="file" accept="image/*" onChange={selectPhoto} /></label><label className="file-input">Photo crop<select name="photo_position" value={form.photo_position} onChange={update}><option value="center">Center</option><option value="top">Top</option><option value="bottom">Bottom</option><option value="left">Left</option><option value="right">Right</option></select></label><div className="form-actions"><button className="secondary" type="button" onClick={onClose} disabled={saving}>Cancel</button><button className="primary" type="submit" disabled={saving}>{saving ? 'Saving...' : 'Save changes'}</button></div></form></div>
 }
