@@ -7,10 +7,11 @@ import { useFestivalData } from './hooks/useFestivalData'
 
 const categories = ['Decoration', 'Pooja Items', 'Food', 'Electricity', 'Sound System', 'Cultural Program', 'Transportation', 'Printing', 'Cleaning', 'Maintenance', 'Other']
 const money = value => `₹${Number(value || 0).toLocaleString('en-IN')}`
+const isRecoveryUrl = () => window.location.hash.includes('type=recovery') || new URLSearchParams(window.location.search).get('type') === 'recovery'
 
 function App() {
   const [user, setUser] = useState(undefined)
-  const [isRecoveringPassword, setIsRecoveringPassword] = useState(() => window.location.hash.includes('type=recovery'))
+  const [isRecoveringPassword, setIsRecoveringPassword] = useState(isRecoveryUrl)
   const [active, setActive] = useState('Dashboard')
   const [modal, setModal] = useState(null)
   const [editingSponsor, setEditingSponsor] = useState(null)
@@ -31,7 +32,7 @@ function App() {
     if (!supabase) { Promise.resolve().then(() => setUser(null)); return undefined }
     supabase.auth.getSession().then(({ data: sessionData }) => setUser(sessionData.session?.user || null))
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'PASSWORD_RECOVERY') setIsRecoveringPassword(true)
+      if (event === 'PASSWORD_RECOVERY' || isRecoveryUrl()) setIsRecoveringPassword(true)
       setUser(session?.user || null)
     })
     return () => listener.subscription.unsubscribe()
