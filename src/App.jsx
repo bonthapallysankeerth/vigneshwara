@@ -26,6 +26,8 @@ function App() {
   const isAdmin = data.profile?.role === 'admin' || user?.user_metadata?.role === 'admin'
   const accountId = data.profile?.association_id || user?.user_metadata?.association_id || user?.id
   const youthName = user?.user_metadata?.youth_name || data.profile?.youth_name || 'Youth Association'
+  const adminEmail = user?.user_metadata?.admin_email || (isAdmin ? user.email : '')
+  const youthEmail = user?.user_metadata?.youth_email || (!isAdmin ? user.email : '')
   const denyChanges = () => { const message = 'You do not have access to make changes. Please report this to the admin.'; setOperationError(message); setToast(message); window.setTimeout(() => setToast(''), 3000) }
 
   useEffect(() => {
@@ -91,7 +93,7 @@ function App() {
 
   const nav = ['Dashboard', 'Chandha', 'Expenses', 'Sponsors', 'Team Members', 'Bookings', 'Budget', 'Festival Program', 'Records / Reports']
   return <div className="app-shell">
-    <aside className={menu ? 'sidebar open' : 'sidebar'}><div className="brand"><div className="brand-mark">ॐ</div><div><strong>{youthName.toUpperCase()}</strong><small>FESTIVAL MANAGEMENT</small></div></div><nav>{nav.map(item => <button className={active === item ? 'nav-item active' : 'nav-item'} key={item} onClick={() => { setActive(item); setMenu(false) }}>{item}</button>)}</nav><div className="sidebar-bottom"><div className="committee"><div className="avatar">{isAdmin ? 'AD' : 'YU'}</div><div><b>{youthName}</b><small>{isAdmin ? 'Admin' : 'Youth'} · {user.email}</small></div></div><button className="logout" onClick={signOut}>↪ &nbsp; Sign out</button></div></aside>
+    <aside className={menu ? 'sidebar open' : 'sidebar'}><div className="brand"><div className="brand-mark">ॐ</div><div><strong>{youthName.toUpperCase()}</strong><small>FESTIVAL MANAGEMENT</small></div></div><nav>{nav.map(item => <button className={active === item ? 'nav-item active' : 'nav-item'} key={item} onClick={() => { setActive(item); setMenu(false) }}>{item}</button>)}</nav><div className="sidebar-bottom"><div className="committee"><div className="avatar">{isAdmin ? 'AD' : 'YU'}</div><div><b>{youthName}</b><small>{isAdmin ? 'Admin' : 'Youth'} · {user.email}</small></div></div><div className="account-ids"><small>Admin mail: {adminEmail || 'Not available'}</small><small>Youth mail: {youthEmail || 'Not available'}</small></div><button className="logout" onClick={signOut}>↪ &nbsp; Sign out</button></div></aside>
     <main className="main"><header><button className="hamburger" onClick={() => setMenu(!menu)}>☰</button><div className="crumb">{youthName} <b>/</b> {active}</div><div className="header-actions"><span className="sync">● {syncState}</span><div className="header-avatar">{isAdmin ? 'AD' : 'YU'}</div></div></header>
       <div className="content"><div className="page-heading"><div><p className="eyebrow">{youthName.toUpperCase()} <span>•</span> SHARED DATABASE</p><h1>{active === 'Dashboard' ? `Hi ${youthName}` : active}</h1><p className="subheading">{active === 'Dashboard' ? 'Here’s the financial pulse of your festival.' : 'Keep every detail accounted for, together.'}</p></div>{active === 'Chandha' ? <div className="heading-actions"><button className="secondary" onClick={() => isAdmin ? setModal('ChandhaCollection') : denyChanges()}>＋ Add chanda</button><button className="primary" onClick={() => isAdmin ? setModal('Income') : denyChanges()}>＋ Add income</button></div> : ['Expenses', 'Sponsors', 'Bookings'].includes(active) && <button className="primary" onClick={() => isAdmin ? setModal(active) : denyChanges()}>＋ Add {active === 'Expenses' ? 'expense' : active === 'Bookings' ? 'booking' : 'sponsor'}</button>}</div>
         {(error || operationError) && <p className="login-error">{operationError || error}</p>}
@@ -149,7 +151,27 @@ function CreateAccount({ onBack }) {
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const update = event => setForm({ ...form, [event.target.name]: event.target.value })
-  const submit = async event => { event.preventDefault(); setError(''); setMessage(''); if (form.admin_password !== form.admin_password_confirm || form.youth_password !== form.youth_password_confirm) { setError('Passwords do not match.'); return } const associationId = crypto.randomUUID(); const admin = await supabase.auth.signUp({ email: form.admin_email, password: form.admin_password, options: { data: { youth_name: form.youth_name, role: 'admin', association_id: associationId } } }); if (admin.error) { setError(admin.error.message); return } const youth = await supabase.auth.signUp({ email: form.youth_email, password: form.youth_password, options: { data: { youth_name: form.youth_name, role: 'youth', association_id: associationId } } }); if (youth.error) { setError(youth.error.message); return } await supabase.auth.signOut(); onBack('Accounts created. Check email confirmation if enabled, then log in with the Admin mail id.') }
+  const submit = async event => {
+    event.preventDefault()
+    setError('')
+    setMessage('')
+    const adminMail = form.admin_email?.trim().toLowerCase()
+    const youthMail = form.youth_email?.trim().toLowerCase()
+    if (adminMail === youthMail) { setError('Admin mail id and Youth mail id must be different.'); return }
+    if (form.admin_password !== form.admin_password_confirm || form.youth_password !== form.youth_password_confirm) { setError('Passwords do not match.'); return }
+    const associationId = crypto.randomUUID()
+    const accountMetadata = { youth_name: form.youth_name, association_id: associationId, admin_email: adminMail, youth_email: youthMail }
+    const admin = await supabase.auth.signUp({ email: adminMail, password: form.admin_password, options: { data: { ...accountMetadata, role: 'admin' } } })
+    if (admin.error) { setError(admin.error.message.includes('already') ? 'Admin mail id already exists. Please use another email.' : admin.error.message); return }
+    if (admin.data.user && admin.data.user.identities?.length === 0) { setError('Admin mail id already exists. Please use another email.'); return }
+    const youth = await supabase.auth.signUp({ email: youthMail, password: form.youth_password, options: { data: { ...accountMetadata, role: 'youth' } } })
+    if (youth.error) { setError(youth.error.message.includes('already') ? 'Youth mail id already exists. Please use another email.' : youth.error.message); await supabase.auth.signOut(); return }
+    if (youth.data.user && youth.data.user.identities?.length === 0) { setError('Youth mail id already exists. Please use another email.'); await supabase.auth.signOut(); return }
+    await supabase.auth.signOut()
+    const login = await supabase.auth.signInWithPassword({ email: adminMail, password: form.admin_password })
+    if (login.error) { onBack(`Accounts created. Admin mail: ${adminMail}. Youth mail: ${youthMail}. Disable email confirmation in Supabase Auth to log in directly.`); return }
+    onBack('Accounts created. You are signed in with the Admin mail id.')
+  }
   return <main className="login-page"><form className="login-card account-card" onSubmit={submit}><div className="brand-mark">ॐ</div><p className="eyebrow">NEW ASSOCIATION</p><h1>Create Account</h1><label>Youth Name<input required name="youth_name" onChange={update} /></label><label>Admin Mail id<input required type="email" name="admin_email" onChange={update} /></label><label>Admin password<input required type="password" name="admin_password" onChange={update} /></label><label>Confirm admin password<input required type="password" name="admin_password_confirm" onChange={update} /></label><label>Youth mail id<input required type="email" name="youth_email" onChange={update} /></label><label>Youth password<input required type="password" name="youth_password" onChange={update} /></label><label>Confirm youth password<input required type="password" name="youth_password_confirm" onChange={update} /></label>{error && <p className="login-error">{error}</p>}{message && <p className="login-success">{message}</p>}<button className="primary" type="submit">Create Account</button><button className="text-btn auth-link" type="button" onClick={onBack}>Back to login</button></form></main>
 }
 function Page({ active, data, totals, query, setQuery, setActive, receive, remove, editSponsor, editRecord, openEvent, openMember, editMember }) { if (active === 'Dashboard') return <><Dashboard data={data} totals={totals} setActive={setActive} /><PendingList expenses={data.expenses} chandha={data.chandha} receive={receive} /></>; if (['Chandha', 'Expenses', 'Sponsors'].includes(active)) return <Ledger title={active} type={active.toLowerCase()} rows={data[active.toLowerCase()]} query={query} setQuery={setQuery} receive={receive} remove={remove} editSponsor={editSponsor} editRecord={editRecord} />; if (active === 'Team Members') return <Team data={data} openMember={openMember} editMember={editMember} remove={remove} />; if (active === 'Bookings') return <Bookings rows={data.bookings} />; if (active === 'Budget') return <Budget totals={totals} />; if (active === 'Festival Program') return <Program events={data.events} openEvent={openEvent} />; return <Reports data={data} totals={totals} /> }
@@ -171,13 +193,15 @@ function EventForm({ onClose, onSave }) {
 
 function ChandhaForm({ mode, onClose, onSave }) {
   const collection = mode === 'collection'
+  const [teamName, setTeamName] = useState('')
   const [form, setForm] = useState({ status: 'Received', date: new Date().toISOString().slice(0, 10) })
+  useEffect(() => { supabase.auth.getUser().then(({ data }) => setTeamName(data.user?.user_metadata?.youth_name || '')) }, [])
   const update = event => setForm({ ...form, [event.target.name]: event.target.value })
   const sendWhatsApp = () => {
     const digits = (form.mobile || '').replace(/\D/g, '')
     const phone = digits.length === 10 ? `91${digits}` : digits
     if (!phone || !form.person || !form.amount || form.status !== 'Received') return
-    const message = `Happy Vinayaka Chaturthi ${form.person}! Thank you for contributing ₹${form.amount}. Thank you from Team Vigneshwara Youth Association.`
+    const message = `Hi ${form.person}, Happy Vinayaka Chaturthi! Thank you for contributing ₹${form.amount}. Thank you from Team ${teamName || 'Vigneshwara Youth Association'}.`
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer')
   }
   const submit = event => {
