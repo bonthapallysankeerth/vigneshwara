@@ -10,6 +10,7 @@ const money = value => `₹${Number(value || 0).toLocaleString('en-IN')}`
 
 function App() {
   const [user, setUser] = useState(undefined)
+  const [isRecoveringPassword, setIsRecoveringPassword] = useState(() => window.location.hash.includes('type=recovery'))
   const [active, setActive] = useState('Dashboard')
   const [modal, setModal] = useState(null)
   const [editingSponsor, setEditingSponsor] = useState(null)
@@ -29,7 +30,10 @@ function App() {
   useEffect(() => {
     if (!supabase) { Promise.resolve().then(() => setUser(null)); return undefined }
     supabase.auth.getSession().then(({ data: sessionData }) => setUser(sessionData.session?.user || null))
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => setUser(session?.user || null))
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') setIsRecoveringPassword(true)
+      setUser(session?.user || null)
+    })
     return () => listener.subscription.unsubscribe()
   }, [])
 
@@ -81,6 +85,7 @@ function App() {
 
   if (user === undefined) return <main className="login-page"><p>Connecting to the festival database...</p></main>
   if (!isSupabaseConfigured) return <main className="login-page"><div className="login-card"><h1>Database setup required</h1><p className="login-copy">Add Supabase credentials to .env and restart the app.</p></div></main>
+  if (isRecoveringPassword) return <UpdatePassword onComplete={() => setIsRecoveringPassword(false)} />
   if (!user) return <Login />
 
   const nav = ['Dashboard', 'Chandha', 'Expenses', 'Sponsors', 'Team Members', 'Bookings', 'Budget', 'Festival Program', 'Records / Reports']
@@ -106,6 +111,36 @@ function Login() {
   const reset = async event => { event.preventDefault(); setError(''); const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin }); if (resetError) setError(resetError.message); else setMessage('Password reset instructions sent to your email.') }
   if (mode === 'signup') return <CreateAccount onBack={message => { setMode('login'); setError(''); setMessage(message || '') }} />
   return <main className="login-page"><form className="login-card" onSubmit={mode === 'reset' ? reset : submit}><div className="brand-mark">ॐ</div><p className="eyebrow">YOUTH ASSOCIATION</p><h1>{mode === 'reset' ? 'Reset password' : 'Welcome back'}</h1><p className="login-copy">{mode === 'reset' ? 'Enter your email to receive reset instructions.' : 'Sign in to the shared festival records.'}</p><label>Email<input required type="email" value={email} onChange={event => setEmail(event.target.value)} /></label>{mode !== 'reset' && <label>Password<input required type="password" value={password} onChange={event => setPassword(event.target.value)} /></label>}{error && <p className="login-error">{error}</p>}{message && <p className="login-success">{message}</p>}<button className="primary" type="submit">{mode === 'reset' ? 'Send reset link' : 'Login'}</button>{mode === 'login' && <><button className="text-btn auth-link" type="button" onClick={() => setMode('reset')}>Forgot password?</button><button className="secondary auth-secondary" type="button" onClick={() => setMode('signup')}>Create Account</button></>}{mode === 'reset' && <button className="text-btn auth-link" type="button" onClick={() => setMode('login')}>Back to login</button>}</form></main>
+}
+
+function UpdatePassword({ onComplete }) {
+  const [password, setPassword] = useState('')
+  const [confirmation, setConfirmation] = useState('')
+  const [error, setError] = useState('')
+  const [message, setMessage] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const submit = async event => {
+    event.preventDefault()
+    setError('')
+    setMessage('')
+    if (password !== confirmation) {
+      setError('Passwords do not match.')
+      return
+    }
+    setSaving(true)
+    const { error: updateError } = await supabase.auth.updateUser({ password })
+    setSaving(false)
+    if (updateError) {
+      setError(updateError.message)
+      return
+    }
+    setMessage('Your password has been updated. You can now sign in with the new password.')
+    await supabase.auth.signOut()
+    window.setTimeout(onComplete, 1200)
+  }
+
+  return <main className="login-page"><form className="login-card" onSubmit={submit}><div className="brand-mark">ॐ</div><p className="eyebrow">ACCOUNT RECOVERY</p><h1>Set new password</h1><p className="login-copy">Choose a new password for your festival account.</p><label>New password<input required minLength="6" type="password" value={password} onChange={event => setPassword(event.target.value)} /></label><label>Confirm new password<input required minLength="6" type="password" value={confirmation} onChange={event => setConfirmation(event.target.value)} /></label>{error && <p className="login-error">{error}</p>}{message && <p className="login-success">{message}</p>}<button className="primary" type="submit" disabled={saving}>{saving ? 'Updating...' : 'Update password'}</button></form></main>
 }
 
 function CreateAccount({ onBack }) {
