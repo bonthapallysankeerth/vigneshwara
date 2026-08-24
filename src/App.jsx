@@ -33,8 +33,8 @@ function App() {
       : data.profile?.role === 'admin' || user?.user_metadata?.role === 'admin'
   const accountId = data.profile?.association_id || user?.user_metadata?.association_id || user?.id
   const youthName = user?.user_metadata?.youth_name || data.profile?.youth_name || 'Youth Association'
-  const adminEmail = user?.user_metadata?.admin_email || (isAdmin ? user.email : '')
-  const youthEmail = user?.user_metadata?.youth_email || (!isAdmin ? user.email : '')
+  const adminEmail = user?.user_metadata?.admin_email || (isAdmin ? user?.email : '')
+  const youthEmail = user?.user_metadata?.youth_email || (!isAdmin ? user?.email : '')
   const denyChanges = () => { const message = 'You do not have access to make changes. Please report this to the admin.'; setOperationError(message); setToast(message); window.setTimeout(() => setToast(''), 3000) }
 
   useEffect(() => {
