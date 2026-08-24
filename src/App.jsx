@@ -23,7 +23,14 @@ function App() {
   const [operationError, setOperationError] = useState('')
   const [saving, setSaving] = useState(false)
   const { data, loading, error, syncState, refresh } = useFestivalData(user)
-  const isAdmin = data.profile?.role === 'admin' || user?.user_metadata?.role === 'admin'
+  const signedInEmail = user?.email?.trim().toLowerCase()
+  const registeredAdminEmail = user?.user_metadata?.admin_email?.trim().toLowerCase()
+  const registeredYouthEmail = user?.user_metadata?.youth_email?.trim().toLowerCase()
+  const isAdmin = registeredAdminEmail && signedInEmail === registeredAdminEmail
+    ? true
+    : registeredYouthEmail && signedInEmail === registeredYouthEmail
+      ? false
+      : data.profile?.role === 'admin' || user?.user_metadata?.role === 'admin'
   const accountId = data.profile?.association_id || user?.user_metadata?.association_id || user?.id
   const youthName = user?.user_metadata?.youth_name || data.profile?.youth_name || 'Youth Association'
   const adminEmail = user?.user_metadata?.admin_email || (isAdmin ? user.email : '')
