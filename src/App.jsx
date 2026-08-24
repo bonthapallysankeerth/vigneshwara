@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import './App.css'
 import './AppAdditions.css'
 import { deleteRecord, insertRecord, updateBudget, updateRecord } from './services/festivalService'
-import { isSupabaseConfigured, supabase } from './services/supabase'
+import { isSupabaseConfigured, signupClient, supabase } from './services/supabase'
 import { useFestivalData } from './hooks/useFestivalData'
 
 const categories = ['Decoration', 'Pooja Items', 'Food', 'Electricity', 'Sound System', 'Cultural Program', 'Transportation', 'Printing', 'Cleaning', 'Maintenance', 'Other']
@@ -168,10 +168,10 @@ function CreateAccount({ onBack }) {
     if (form.admin_password !== form.admin_password_confirm || form.youth_password !== form.youth_password_confirm) { setError('Passwords do not match.'); return }
     const associationId = crypto.randomUUID()
     const accountMetadata = { youth_name: form.youth_name, association_id: associationId, admin_email: adminMail, youth_email: youthMail }
-    const admin = await supabase.auth.signUp({ email: adminMail, password: form.admin_password, options: { data: { ...accountMetadata, role: 'admin' } } })
+    const admin = await signupClient.auth.signUp({ email: adminMail, password: form.admin_password, options: { data: { ...accountMetadata, role: 'admin' } } })
     if (admin.error) { setError(admin.error.message.includes('already') ? 'Admin mail id already exists. Please use another email.' : admin.error.message); return }
     if (admin.data.user && admin.data.user.identities?.length === 0) { setError('Admin mail id already exists. Please use another email.'); return }
-    const youth = await supabase.auth.signUp({ email: youthMail, password: form.youth_password, options: { data: { ...accountMetadata, role: 'youth' } } })
+    const youth = await signupClient.auth.signUp({ email: youthMail, password: form.youth_password, options: { data: { ...accountMetadata, role: 'youth' } } })
     if (youth.error) { setError(youth.error.message.includes('already') ? 'Youth mail id already exists. Please use another email.' : youth.error.message); await supabase.auth.signOut(); return }
     if (youth.data.user && youth.data.user.identities?.length === 0) { setError('Youth mail id already exists. Please use another email.'); await supabase.auth.signOut(); return }
     await supabase.auth.signOut()
