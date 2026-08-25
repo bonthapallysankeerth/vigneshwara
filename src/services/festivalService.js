@@ -11,31 +11,34 @@ export async function fetchFestivalData(ownerId, userId = ownerId) {
   const client = requireClient()
   const [chandha, expenses, sponsors, members, budget, programs, bookings, profile] = await Promise.all([
     client.from('chandha').select('*').eq('owner_id', ownerId).order('created_at', { ascending: false }),
-    client.from('expenses').select('*, team_members(id, name, role)').eq('owner_id', ownerId).order('created_at', { ascending: false }),
+    client.from('expenses').select('*').eq('owner_id', ownerId).order('created_at', { ascending: false }),
     client.from('sponsors').select('*').eq('owner_id', ownerId).order('created_at', { ascending: false }),
     client.from('team_members').select('*').eq('owner_id', ownerId).order('created_at'),
     client.from('budget').select('*').eq('owner_id', ownerId).order('updated_at', { ascending: false }).limit(1).maybeSingle(),
     client.from('festival_programs').select('*').eq('owner_id', ownerId).order('day_number'),
     client.from('bookings').select('*').eq('owner_id', ownerId).order('created_at', { ascending: false }),
-    client.from('user_profiles').select('*').eq('id', userId).maybeSingle(),
+    client.from('user_profiles').select('*').eq('association_id', ownerId),
   ])
   const result = [chandha, expenses, sponsors, members, budget, programs, bookings, profile].find(entry => entry.error)
   if (result) throw result.error
+  const memberById = new Map((members.data || []).map(member => [member.id, member]))
   return {
     chandha: chandha.data || [],
-    expenses: (expenses.data || []).map(row => ({ ...row, spentBy: row.team_members?.name || 'Unassigned', spentById: row.spent_by })),
+    expenses: (expenses.data || []).map(row => ({ ...row, spentBy: memberById.get(row.spent_by)?.name || 'Unassigned', spentById: row.spent_by })),
     sponsors: sponsors.data || [],
     members: members.data || [],
     budget: Number(budget.data?.total_budget || 0),
     events: programs.data || [],
     bookings: bookings.data || [],
-    profile: profile.data || null,
+    profile: profile.data?.find(item => item.id === userId) || null,
+    accountProfiles: profile.data || [],
   }
 }
 
 export async function insertRecord(table, payload, userId, ownerId = userId) {
   const client = requireClient()
-  const record = { ...payload, owner_id: ownerId, created_by: userId }
+  const record = { ...payload, owner_id: ownerId }
+  if (table !== 'team_members') record.created_by = userId
   const { data, error } = await client.from(table).insert(record).select().single()
   if (error) throw error
   return data

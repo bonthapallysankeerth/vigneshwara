@@ -3,7 +3,7 @@ import { fetchFestivalData, subscribeToFestivalData } from '../services/festival
 import { isSupabaseConfigured, supabase } from '../services/supabase'
 
 export function useFestivalData(user) {
-  const [data, setData] = useState({ chandha: [], sponsors: [], expenses: [], events: [], bookings: [], members: [], budget: 0, profile: null })
+  const [data, setData] = useState({ chandha: [], sponsors: [], expenses: [], events: [], bookings: [], members: [], budget: 0, profile: null, accountProfiles: [] })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [syncState, setSyncState] = useState('Connecting...')

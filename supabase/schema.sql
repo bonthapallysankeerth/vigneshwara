@@ -9,6 +9,8 @@ create table if not exists public.user_profiles (
 );
 
 alter table public.user_profiles add column if not exists association_id uuid;
+alter table public.user_profiles add column if not exists admin_email text;
+alter table public.user_profiles add column if not exists youth_email text;
 
 alter table public.user_profiles enable row level security;
 
@@ -18,9 +20,9 @@ language plpgsql
 security definer set search_path = public
 as $$
 begin
-  insert into public.user_profiles (id, youth_name, role, association_id)
-  values (new.id, coalesce(new.raw_user_meta_data->>'youth_name', 'Youth Association'), coalesce(new.raw_user_meta_data->>'role', 'youth'), coalesce((new.raw_user_meta_data->>'association_id')::uuid, new.id))
-  on conflict (id) do update set youth_name = excluded.youth_name, role = excluded.role, association_id = excluded.association_id;
+  insert into public.user_profiles (id, youth_name, role, association_id, admin_email, youth_email)
+  values (new.id, coalesce(new.raw_user_meta_data->>'youth_name', 'Youth Association'), coalesce(new.raw_user_meta_data->>'role', 'youth'), coalesce((new.raw_user_meta_data->>'association_id')::uuid, new.id), new.raw_user_meta_data->>'admin_email', new.raw_user_meta_data->>'youth_email')
+  on conflict (id) do update set youth_name = excluded.youth_name, role = excluded.role, association_id = excluded.association_id, admin_email = excluded.admin_email, youth_email = excluded.youth_email;
   return new;
 end;
 $$;
@@ -30,10 +32,15 @@ create trigger on_auth_user_created_profile
   after insert on auth.users
   for each row execute procedure public.create_user_profile();
 
-insert into public.user_profiles (id, youth_name, role, association_id)
-select id, coalesce(raw_user_meta_data->>'youth_name', 'Youth Association'), 'admin', coalesce((raw_user_meta_data->>'association_id')::uuid, id)
+insert into public.user_profiles (id, youth_name, role, association_id, admin_email, youth_email)
+select id, coalesce(raw_user_meta_data->>'youth_name', 'Youth Association'), coalesce(raw_user_meta_data->>'role', 'admin'), coalesce((raw_user_meta_data->>'association_id')::uuid, id), raw_user_meta_data->>'admin_email', raw_user_meta_data->>'youth_email'
 from auth.users
 where not exists (select 1 from public.user_profiles where user_profiles.id = auth.users.id);
+
+update public.user_profiles profile
+set admin_email = users.raw_user_meta_data->>'admin_email', youth_email = users.raw_user_meta_data->>'youth_email'
+from auth.users users
+where profile.id = users.id and (profile.admin_email is null or profile.youth_email is null);
 
 update public.user_profiles set association_id = id where association_id is null;
 
@@ -48,7 +55,8 @@ language sql stable security definer set search_path = public
 as $$ select coalesce(association_id, id) from public.user_profiles where id = auth.uid(); $$;
 
 drop policy if exists "users can view own profile" on public.user_profiles;
-create policy "users can view own profile" on public.user_profiles for select to authenticated using (id = auth.uid());
+drop policy if exists "users can view association profiles" on public.user_profiles;
+create policy "users can view association profiles" on public.user_profiles for select to authenticated using (association_id = public.current_association_id());
 
 create table if not exists public.team_members (
   id uuid primary key default gen_random_uuid(),
@@ -57,6 +65,7 @@ create table if not exists public.team_members (
   team_name text,
   photo_url text,
   photo_position text not null default 'center',
+  created_by uuid references auth.users(id),
   owner_id uuid,
   created_at timestamptz not null default now()
 );
@@ -64,6 +73,7 @@ alter table public.team_members add column if not exists photo_url text;
 alter table public.team_members add column if not exists team_name text;
 alter table public.team_members add column if not exists photo_position text not null default 'center';
 alter table public.team_members add column if not exists owner_id uuid;
+alter table public.team_members add column if not exists created_by uuid references auth.users(id);
 
 create table if not exists public.chandha (
   id uuid primary key default gen_random_uuid(), person_name text not null, mobile text,
