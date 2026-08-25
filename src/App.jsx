@@ -222,7 +222,9 @@ function ChandhaForm({ mode, onClose, onSave }) {
     const phone = digits.length === 10 ? `91${digits}` : digits
     if (!phone || !form.person || !form.amount || form.status !== 'Received') return
     const message = `Hi ${form.person}, Happy Vinayaka Chaturthi! Thank you for contributing ₹${form.amount}. Thank you from ${teamName || 'Youth Association'}.`
-    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer')
+    const whatsappUrl = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`
+    const whatsappWindow = window.open(whatsappUrl, '_blank')
+    if (!whatsappWindow) window.location.assign(whatsappUrl)
   }
   const submit = event => {
     event.preventDefault()
