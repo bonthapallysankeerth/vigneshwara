@@ -49,16 +49,6 @@ function App() {
     return () => listener.subscription.unsubscribe()
   }, [])
 
-  useEffect(() => {
-    const limitMobileInput = event => {
-      if (event.target instanceof HTMLInputElement && event.target.name === 'mobile') {
-        event.target.value = event.target.value.replace(/\D/g, '').slice(0, 10)
-      }
-    }
-    document.addEventListener('input', limitMobileInput, true)
-    return () => document.removeEventListener('input', limitMobileInput, true)
-  }, [])
-
   const totals = useMemo(() => {
     const sum = (rows, status) => rows.filter(row => !status || row.status === status).reduce((total, row) => total + Number(row.amount || 0), 0)
     const expenses = sum(data.expenses)
