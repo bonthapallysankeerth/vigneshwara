@@ -223,8 +223,13 @@ function ChandhaForm({ mode, onClose, onSave }) {
     if (!phone || !form.person || !form.amount || form.status !== 'Received') return
     const message = `Hi ${form.person}, Happy Vinayaka Chaturthi! Thank you for contributing ₹${form.amount}. Thank you from ${teamName || 'Youth Association'}.`
     const whatsappUrl = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`
-    const whatsappWindow = window.open(whatsappUrl, '_blank')
-    if (!whatsappWindow) window.location.assign(whatsappUrl)
+    const whatsappLink = document.createElement('a')
+    whatsappLink.href = whatsappUrl
+    whatsappLink.target = '_blank'
+    whatsappLink.rel = 'noopener noreferrer'
+    document.body.appendChild(whatsappLink)
+    whatsappLink.click()
+    whatsappLink.remove()
   }
   const submit = event => {
     event.preventDefault()
