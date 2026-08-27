@@ -21,6 +21,7 @@ export const signupClient = isSupabaseConfigured
         persistSession: false,
         autoRefreshToken: false,
         detectSessionInUrl: false,
+        storageKey: 'supabase-signup',
       },
     })
   : null
