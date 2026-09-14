@@ -10,7 +10,7 @@ const requireClient = () => {
 export async function fetchFestivalData(ownerId, userId = ownerId) {
   const client = requireClient()
   const [chandha, expenses, sponsors, members, budget, programs, bookings, profile] = await Promise.all([
-    client.from('chandha').select('*').eq('owner_id', ownerId).order('created_at', { ascending: false }),
+    client.from('chandha').select('*').eq('owner_id', ownerId).order('created_at', { ascending: false }).order('id', { ascending: false }),
     client.from('expenses').select('*').eq('owner_id', ownerId).order('created_at', { ascending: false }),
     client.from('sponsors').select('*').eq('owner_id', ownerId).order('created_at', { ascending: false }),
     client.from('team_members').select('*').eq('owner_id', ownerId).order('created_at'),
