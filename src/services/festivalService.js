@@ -1,6 +1,6 @@
 import { supabase } from './supabase'
 
-const tables = ['chandha', 'expenses', 'sponsors', 'festival_programs', 'bookings', 'team_members']
+const tables = ['chandha', 'expenses', 'sponsors', 'festival_programs', 'bookings', 'team_members', 'loans', 'loan_repayments']
 
 const requireClient = () => {
   if (!supabase) throw new Error('Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to .env.')
@@ -9,7 +9,7 @@ const requireClient = () => {
 
 export async function fetchFestivalData(ownerId, userId = ownerId) {
   const client = requireClient()
-  const [chandha, expenses, sponsors, members, budget, programs, bookings, profile] = await Promise.all([
+  const [chandha, expenses, sponsors, members, budget, programs, bookings, loans, repayments, profile] = await Promise.all([
     client.from('chandha').select('*').eq('owner_id', ownerId).order('created_at', { ascending: false }).order('id', { ascending: false }),
     client.from('expenses').select('*').eq('owner_id', ownerId).order('created_at', { ascending: false }),
     client.from('sponsors').select('*').eq('owner_id', ownerId).order('created_at', { ascending: false }),
@@ -17,9 +17,11 @@ export async function fetchFestivalData(ownerId, userId = ownerId) {
     client.from('budget').select('*').eq('owner_id', ownerId).order('updated_at', { ascending: false }).limit(1).maybeSingle(),
     client.from('festival_programs').select('*').eq('owner_id', ownerId).order('day_number'),
     client.from('bookings').select('*').eq('owner_id', ownerId).order('created_at', { ascending: false }),
+    client.from('loans').select('*').eq('owner_id', ownerId).order('created_at', { ascending: false }),
+    client.from('loan_repayments').select('*').eq('owner_id', ownerId).order('created_at', { ascending: false }),
     client.from('user_profiles').select('*').eq('association_id', ownerId),
   ])
-  const result = [chandha, expenses, sponsors, members, budget, programs, bookings, profile].find(entry => entry.error)
+  const result = [chandha, expenses, sponsors, members, budget, programs, bookings, loans, repayments, profile].find(entry => entry.error)
   if (result) throw result.error
   const memberById = new Map((members.data || []).map(member => [member.id, member]))
   return {
@@ -30,6 +32,8 @@ export async function fetchFestivalData(ownerId, userId = ownerId) {
     budget: Number(budget.data?.total_budget || 0),
     events: programs.data || [],
     bookings: bookings.data || [],
+    loans: loans.data || [],
+    loanRepayments: repayments.data || [],
     profile: profile.data?.find(item => item.id === userId) || null,
     accountProfiles: profile.data || [],
   }
@@ -76,3 +80,4 @@ export function subscribeToFestivalData(onChange) {
   channel.subscribe()
   return () => { supabase.removeChannel(channel) }
 }
+
